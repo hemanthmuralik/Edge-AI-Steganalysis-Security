@@ -1,39 +1,66 @@
-import argparse, getpass
-from PIL import Image
+# file: stego_encrypt.py
+import cv2
 import numpy as np
-from utils.aes_utils import derive_key, encrypt_aes256_gcm
-from utils.lsb_utils import embed_bytes_in_image, load_image, save_image
+import os
+import random
 
-def main(in_path, out_path, text=None, infile=None):
-    # load image
-    img = load_image(in_path)
-    # read payload
-    if text is not None:
-        payload = text.encode('utf-8')
+def to_bin(data):
+    """Convert string to binary."""
+    if isinstance(data, str):
+        return ''.join([format(ord(i), "08b") for i in data])
+    elif isinstance(data, bytes):
+        return ''.join([format(i, "08b") for i in data])
+    elif isinstance(data, np.ndarray):
+        return [format(i, "08b") for i in data]
+    elif isinstance(data, int) or isinstance(data, np.uint8):
+        return format(data, "08b")
     else:
-        with open(infile, 'rb') as f:
-            payload = f.read()
-    # ask passphrase and derive key+salt
-    passphrase = getpass.getpass('Passphrase (will derive AES-256 key): ')
-    key, salt = derive_key(passphrase)
-    # encrypt with AES-GCM
-    nonce, ciphertext, tag = encrypt_aes256_gcm(key, payload)
-    # prepare blob = salt(16) + nonce(12) + tag(16) + ciphertext
-    blob = salt + nonce + tag + ciphertext
-    # embed into image
-    stego = embed_bytes_in_image(img, blob)
-    save_image(stego, out_path)
-    print('Wrote stego image to', out_path)
-    print('Note: keep the passphrase to decrypt. Salt is stored inside the image.')
+        raise TypeError("Input type not supported")
 
-if __name__ == '__main__':
-    p = argparse.ArgumentParser(description='Encrypt payload (AES-256-GCM) and embed into image LSB')
-    p.add_argument('--in', dest='in_path', required=True, help='input cover image (PNG recommended)')
-    p.add_argument('--out', dest='out_path', required=True, help='output stego image path')
-    p.add_argument('--text', dest='text', help='text payload to embed (mutually exclusive with --file)')
-    p.add_argument('--file', dest='infile', help='file to embed as payload')
-    args = p.parse_args()
-    if args.text is None and args.infile is None:
-        print('Provide --text or --file')
-    else:
-        main(args.in_path, args.out_path, text=args.text, infile=args.infile)
+def encrypt_image_random(image_path, secret_message, output_path):
+    """
+    Embeds data into random pixels rather than sequential ones.
+    This mimics more advanced steganography and prevents the model
+    from just memorizing the top-left corner of images.
+    """
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error: Could not read {image_path}")
+        return
+
+    # Add a delimiter so we know when the message ends
+    secret_message += "#####" 
+    data_bin = to_bin(secret_message)
+    data_len = len(data_bin)
+    
+    height, width, channels = img.shape
+    total_pixels = height * width
+    
+    if data_len > total_pixels * 3:
+        raise ValueError("Insufficient pixels to hold data")
+
+    # --- THE UPGRADE: Randomize Coordinates ---
+    # Create a list of all (x, y) coordinates
+    coords = [(x, y) for x in range(height) for y in range(width)]
+    # Shuffle them securely based on a seed (optional: use a key)
+    random.seed(42) 
+    random.shuffle(coords)
+
+    data_index = 0
+    
+    # Iterate through random pixels
+    for x, y in coords:
+        if data_index < data_len:
+            # Modify the Blue channel (channel 0)
+            pixel = img[x, y]
+            # specific LSB modification
+            pixel[0] = int(to_bin(pixel[0])[:-1] + data_bin[data_index], 2)
+            data_index += 1
+        else:
+            break
+            
+    cv2.imwrite(output_path, img)
+    print(f"Data embedded into {output_path} using Randomized LSB.")
+
+# Example usage
+# encrypt_image_random("examples/cover.jpg", "Secret Agent Data", "examples/stego.png")
