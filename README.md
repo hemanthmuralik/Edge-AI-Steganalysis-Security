@@ -38,10 +38,9 @@ Instead, Colab computes:
 - **False Positive Rate (FPR)**
 - **False Negative Rate (FNR)**
 - **Detection Error:**  
-  \[
-  P_E = 0.5 	imes (FPR + FNR)
-  \]
-
+  $$
+P_E = 0.5 \times (FPR + FNR)
+$$
 The model with **lowest P_E** is saved as `best_pe.h5`.
 
 ### 5. Inference Demo  
