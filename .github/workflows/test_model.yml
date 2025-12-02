@@ -20,6 +20,4 @@ jobs:
         
     - name: Verify Model Architecture
       run: |
-        # FIX: Add current directory to PYTHONPATH so 'models' package is found
-        export PYTHONPATH=$PYTHONPATH:.
-        python -c "from models.ye_net import build_yenet; model = build_yenet(); model.summary(); print('✅ Ye-Net Compiled Successfully')"
+        python test_ci.py
